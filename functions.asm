@@ -1,78 +1,141 @@
-; functions.asm
-; Utility functions for namespace.asm
-; Compile with: nasm -f elf functions.asm
+; Simplified Lesson-16-functions.asm
 
-SECTION .data
-newline db 0xA, 0 ; Line feed (newline character)
+; String length calculation function
+slen:
+    push    ebx
+    mov     ebx, eax
 
-SECTION .text
+nextchar:
+    cmp     byte [eax], 0
+    jz      .finished
+    inc     eax
+    jmp     nextchar
 
-global sprint
-global iprint
-global iprintLF
-global sprintLF
-global quit
+.finished:
+    sub     eax, ebx
+    pop     ebx
+    ret
 
-; Print a string (EAX contains the address of the string)
+; String printing function
 sprint:
-    pusha                   ; Save registers
-.print_loop:
-    mov al, [eax]           ; Load the next byte of the string
-    cmp al, 0               ; Check if it's the null terminator
-    je .done                ; If yes, we're done
-    mov ebx, 1              ; File descriptor: stdout
-    mov ecx, eax            ; Pointer to the string
-    mov edx, 1              ; Write one byte
-    mov eax, 4              ; Syscall number: sys_write
-    int 0x80                ; Make the system call
-    inc eax                 ; Move to the next character
-    jmp .print_loop         ; Repeat for the next character
-.done:
-    popa                    ; Restore registers
+    push    edx
+    push    ecx
+    push    ebx
+    push    eax
+    call    slen
+
+    mov     edx, eax
+    pop     eax
+
+    mov     ecx, eax
+    mov     ebx, 1
+    mov     eax, 4
+    int     80h
+
+    pop     ebx
+    pop     ecx
+    pop     edx
     ret
 
-; Print an integer (EAX contains the integer)
-iprint:
-    pusha                   ; Save registers
-    xor ecx, ecx            ; Clear ECX for digit storage
-    mov ebx, 10             ; Divisor for modulo operation
-.convert_loop:
-    xor edx, edx            ; Clear EDX for division
-    div ebx                 ; EAX / 10, remainder in EDX
-    add dl, '0'             ; Convert remainder to ASCII
-    push dx                 ; Store ASCII character on the stack
-    inc ecx                 ; Increment digit count
-    test eax, eax           ; Check if EAX is 0
-    jnz .convert_loop       ; Repeat until all digits are processed
-.print_loop:
-    pop dx                  ; Retrieve character from stack
-    mov al, dl              ; Move it into AL for output
-    mov ebx, 1              ; File descriptor: stdout
-    mov ecx, esp            ; Address of character
-    mov edx, 1              ; Write one byte
-    mov eax, 4              ; Syscall number: sys_write
-    int 0x80                ; Make the system call
-    loop .print_loop        ; Repeat until all characters are printed
-    popa                    ; Restore registers
-    ret
-
-; Print an integer with a newline (EAX contains the integer)
-iprintLF:
-    call iprint             ; Print the integer
-    mov eax, newline        ; Load the newline character
-    call sprint             ; Print the newline
-    ret
-
-; Print a string with a newline (EAX contains the address of the string)
+; String printing with line feed function
 sprintLF:
-    call sprint             ; Print the string
-    mov eax, newline        ; Load the newline character
-    call sprint             ; Print the newline
+    call    sprint
+
+    push    eax
+    mov     eax, 0AH
+    push    eax
+    mov     eax, esp
+    call    sprint
+    pop     eax
+    pop     eax
     ret
 
-; Exit the program
+; Integer printing function (itoa)
+iprint:
+    push    eax
+    push    ecx
+    push    edx
+    push    esi
+    mov     ecx, 0
+
+divideLoop:
+    inc     ecx
+    mov     edx, 0
+    mov     esi, 10
+    idiv    esi
+    add     edx, 48
+    push    edx
+    cmp     eax, 0
+    jnz     divideLoop
+
+printLoop:
+    dec     ecx
+    mov     eax, esp
+    call    sprint
+    pop     eax
+    cmp     ecx, 0
+    jnz     printLoop
+
+    pop     esi
+    pop     edx
+    pop     ecx
+    pop     eax
+    ret
+
+; Integer printing function with linefeed (itoa)
+iprintLF:
+    call    iprint
+
+    push    eax
+    mov     eax, 0Ah
+    push    eax
+    mov     eax, esp
+    call    sprint
+    pop     eax
+    pop     eax
+    ret
+
+; Exit program and restore resources
 quit:
-    mov eax, 1              ; Syscall number: sys_exit
-    xor ebx, ebx            ; Exit code: 0
-    int 0x80                ; Make the system call
+    mov     ebx, 0
+    mov     eax, 1
+    int     80h
+    ret
+
+; Ascii to integer function (atoi)
+atoi:
+    push    ebx
+    push    ecx
+    push    edx
+    push    esi
+    mov     esi, eax
+    mov     eax, 0
+    mov     ecx, 0
+
+.multiplyLoop:
+    xor     ebx, ebx
+    mov     bl, [esi+ecx]
+    cmp     bl, 48
+    jl      .finished
+    cmp     bl, 57
+    jg      .finished
+
+    sub     bl, 48
+    add     eax, ebx
+    mov     ebx, 10
+    mul     ebx
+    inc     ecx
+    jmp     .multiplyLoop
+
+.finished:
+    cmp     ecx, 0
+    je      .restore
+    mov     ebx, 10
+    div     ebx
+
+.restore:
+    pop     esi
+    pop     edx
+    pop     ecx
+    pop     ebx
     ret
